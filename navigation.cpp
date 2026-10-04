@@ -1,0 +1,214 @@
+#include "navigation.h"
+#include "config.h"
+#include "motor.h"
+#include "sensors.h"
+
+namespace {
+
+RobotMode mode = MODE_IDLE;
+NavState state = NAV_STOPPED;
+uint32_t stateStartMs = 0;
+
+TurnDir turnDir = TURN_RIGHT;
+bool escapeAfterBackup = false;
+
+ManualCmd manualCmd = MANUAL_STOP;
+
+// Lich su cac lan gap vat can de phat hien bi ket trong goc
+uint32_t obstacleTimes[STUCK_COUNT] = {0};
+uint8_t obstacleIdx = 0;
+
+void setState(NavState s) {
+  if (s == state) return;
+  state = s;
+  stateStartMs = millis();
+  Serial.printf("[NAV] -> %s\n", navStateName(s));
+}
+
+// Ghi nhan 1 lan gap vat can, tra ve true neu dang bi ket
+bool registerObstacle(uint32_t now) {
+  obstacleTimes[obstacleIdx] = now;
+  obstacleIdx = (obstacleIdx + 1) % STUCK_COUNT;
+  // Phan tu cu nhat nam ngay tai obstacleIdx
+  uint32_t oldest = obstacleTimes[obstacleIdx];
+  if (oldest != 0 && now - oldest < STUCK_WINDOW_MS) {
+    memset(obstacleTimes, 0, sizeof(obstacleTimes));
+    return true;
+  }
+  return false;
+}
+
+TurnDir chooseTurn(const Distances& d, bool blockedL, bool blockedR) {
+  if (blockedL && !blockedR) return TURN_RIGHT;
+  if (blockedR && !blockedL) return TURN_LEFT;
+  // Hai ben xap xi nhau -> giu huong cu de khong lac qua lac lai trong goc
+  if (fabsf(d.left - d.right) < DIST_SIDE_EQUAL) return turnDir;
+  return d.left > d.right ? TURN_LEFT : TURN_RIGHT;
+}
+
+void spin(TurnDir dir) {
+  if (dir == TURN_LEFT) motorSet(-SPEED_TURN, SPEED_TURN);
+  else                  motorSet(SPEED_TURN, -SPEED_TURN);
+}
+
+bool frontClear(const Distances& d) {
+  return d.center > DIST_CLEAR_CENTER &&
+         d.left > DIST_STOP_SIDE && d.right > DIST_STOP_SIDE;
+}
+
+void updateAuto(const Distances& d, uint32_t now) {
+  uint32_t elapsed = now - stateStartMs;
+
+  switch (state) {
+    case NAV_STOPPED:
+      setState(NAV_FORWARD);
+      break;
+
+    case NAV_FORWARD: {
+      bool blockedC = d.center < DIST_STOP_CENTER;
+      bool blockedL = d.left < DIST_STOP_SIDE;
+      bool blockedR = d.right < DIST_STOP_SIDE;
+
+      if (blockedC || blockedL || blockedR) {
+        motorBrake();
+        turnDir = chooseTurn(d, blockedL, blockedR);
+        escapeAfterBackup = registerObstacle(now);
+        Serial.printf("[NAV] Vat can L=%.0f C=%.0f R=%.0f -> quay %s%s\n",
+                      d.left, d.center, d.right,
+                      turnDir == TURN_LEFT ? "TRAI" : "PHAI",
+                      escapeAfterBackup ? " (KET GOC)" : "");
+        setState(NAV_BRAKE);
+        break;
+      }
+
+      int base = d.center < DIST_SLOW_CENTER ? SPEED_SLOW : SPEED_CRUISE;
+      int l = base, r = base;
+      // Lach nhe ra xa tuong ben canh
+      if (d.left < DIST_STEER_SIDE && d.left <= d.right)        r = base * STEER_FACTOR;
+      else if (d.right < DIST_STEER_SIDE && d.right < d.left)   l = base * STEER_FACTOR;
+      motorSet(l, r);
+      break;
+    }
+
+    case NAV_BRAKE:
+      if (elapsed >= BRAKE_MS) setState(NAV_BACKUP);
+      break;
+
+    case NAV_BACKUP:
+      motorSet(-SPEED_BACK, -SPEED_BACK);
+      if (elapsed >= BACKUP_MS) {
+        motorBrake();
+        setState(escapeAfterBackup ? NAV_ESCAPE : NAV_TURN);
+      }
+      break;
+
+    case NAV_TURN:
+      spin(turnDir);
+      if ((elapsed >= TURN_MIN_MS && frontClear(d)) || elapsed >= TURN_MAX_MS) {
+        // Het TURN_MAX_MS ma van chua thoang: NAV_FORWARD se phat hien lai
+        // va tiep tuc lui/quay; lap lai nhieu lan se kich hoat ESCAPE.
+        if (!frontClear(d)) {
+          Serial.printf("[NAV] Quay het %d ms van chua thoang L=%.0f C=%.0f R=%.0f\n",
+                        TURN_MAX_MS, d.left, d.center, d.right);
+        }
+        motorBrake();
+        setState(NAV_FORWARD);
+      }
+      break;
+
+    case NAV_ESCAPE:
+      spin(turnDir);
+      if (elapsed >= ESCAPE_TURN_MS) {
+        motorBrake();
+        // Lan sau doi huong de khong lap lai cung mot kieu thoat
+        turnDir = turnDir == TURN_LEFT ? TURN_RIGHT : TURN_LEFT;
+        setState(NAV_FORWARD);
+      }
+      break;
+  }
+}
+
+void updateManual(const Distances& d) {
+  switch (manualCmd) {
+    case MANUAL_FORWARD:
+      if (d.center < DIST_STOP_CENTER) {
+        motorBrake();
+        manualCmd = MANUAL_STOP;
+        Serial.println("[NAV] Dieu khien tay: phia truoc co vat can, da dung");
+      } else {
+        motorSet(SPEED_MANUAL, SPEED_MANUAL);
+      }
+      break;
+    case MANUAL_BACKWARD: motorSet(-SPEED_MANUAL, -SPEED_MANUAL); break;
+    case MANUAL_LEFT:     motorSet(-SPEED_TURN, SPEED_TURN);      break;
+    case MANUAL_RIGHT:    motorSet(SPEED_TURN, -SPEED_TURN);      break;
+    case MANUAL_STOP:     motorStop();                            break;
+  }
+}
+
+}  // namespace
+
+void navInit() {
+  mode = MODE_IDLE;
+  state = NAV_STOPPED;
+  motorBrake();
+}
+
+void navUpdate() {
+  const Distances& d = sensorsGet();
+  uint32_t now = millis();
+
+  switch (mode) {
+    case MODE_AUTO:   updateAuto(d, now); break;
+    case MODE_MANUAL: updateManual(d);    break;
+    case MODE_IDLE:   break;
+  }
+}
+
+void navStartAuto() {
+  mode = MODE_AUTO;
+  memset(obstacleTimes, 0, sizeof(obstacleTimes));
+  setState(NAV_FORWARD);
+  Serial.println("[NAV] Che do AUTO");
+}
+
+void navStop() {
+  mode = MODE_IDLE;
+  manualCmd = MANUAL_STOP;
+  motorBrake();
+  setState(NAV_STOPPED);
+  Serial.println("[NAV] Dung");
+}
+
+void navManual(ManualCmd cmd) {
+  if (mode != MODE_MANUAL) {
+    mode = MODE_MANUAL;
+    setState(NAV_STOPPED);
+    Serial.println("[NAV] Che do MANUAL");
+  }
+  manualCmd = cmd;
+}
+
+RobotMode navGetMode()  { return mode; }
+NavState  navGetState() { return state; }
+
+const char* navStateName(NavState s) {
+  switch (s) {
+    case NAV_STOPPED: return "STOPPED";
+    case NAV_FORWARD: return "FORWARD";
+    case NAV_BRAKE:   return "BRAKE";
+    case NAV_BACKUP:  return "BACKUP";
+    case NAV_TURN:    return "TURN";
+    case NAV_ESCAPE:  return "ESCAPE";
+  }
+  return "?";
+}
+
+const char* navModeName(RobotMode m) {
+  switch (m) {
+    case MODE_IDLE:   return "IDLE";
+    case MODE_AUTO:   return "AUTO";
+    case MODE_MANUAL: return "MANUAL";
+  }
+  return "?";
+}
