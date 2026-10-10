@@ -27,7 +27,7 @@
 // Gan duoi day, phia truoc, mat cam bien huong xuong san cach ~5-10 mm.
 // Chi dung D0 = ngo ra so cua LM393 (do nhay chinh bang bien tro tren module).
 // Chan A0 cua module de trong, khong noi.
-#define PIN_CLIFF_DO 2
+#define PIN_CLIFF_DO 4
 
 // ============================================================
 //  DONG CO
@@ -98,8 +98,6 @@
 // Sau mep roi quay co dinh thoi gian nay (~90 do, can chinh theo robot; ESCAPE_TURN_MS ~180 do).
 // Khong dung sieu am de quyet dinh vi sieu am khong nhin thay mep roi.
 #define CLIFF_TURN_MS         750
-// Sau khi lui ma van chua thay san trong thoi gian nay -> dung han (nghi bi nhac len)
-#define CLIFF_BACKUP_MAX_MS   2000
 
 // ============================================================
 //  NGUONG TRANH VAT CAN (cm)

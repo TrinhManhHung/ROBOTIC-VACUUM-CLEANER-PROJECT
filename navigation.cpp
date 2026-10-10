@@ -117,15 +117,8 @@ void updateAuto(const Distances& d, bool cliff, uint32_t now) {
 
     case NAV_BACKUP:
       motorSet(-SPEED_BACK, -SPEED_BACK);
-      if (cliff) {
-        // Van chua thay san: lui tiep; qua lau -> co the bi nhac len, dung han cho an toan
-        if (elapsed >= CLIFF_BACKUP_MAX_MS) {
-          motorBrake();
-          mode = MODE_IDLE;
-          setState(NAV_STOPPED);
-          Serial.println("[NAV] Lui qua lau van khong thay san (bi nhac len?) -> DUNG");
-        }
-      } else if (elapsed >= BACKUP_MS &&
+      // Van chua thay san -> cu lui tiep cho den khi thay lai san
+      if (!cliff && elapsed >= BACKUP_MS &&
                  (!cliffEvent || now - lastCliffMs >= CLIFF_EXTRA_BACKUP_MS)) {
         motorBrake();
         setState(escapeAfterBackup ? NAV_ESCAPE : NAV_TURN);
