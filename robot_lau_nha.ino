@@ -1,5 +1,5 @@
-// Robot hut bui / lau nha - ESP32 + L298N + 3x HC-SR04
-// Giai doan 1: di chuyen cham va tranh vat can
+// Robot hut bui / lau nha - ESP32 + L298N + 3x HC-SR04 + TCRT5000
+// Giai doan 1: di chuyen cham, tranh vat can va chong roi
 //
 // Lenh qua Serial Monitor (115200, gui tung ky tu):
 //   g : bat dau che do AUTO (tu di, tranh vat can)
@@ -52,8 +52,10 @@ static void printDebug() {
   lastDebugMs = now;
 
   const Distances& d = sensorsGet();
-  Serial.printf("L=%5.1f C=%5.1f R=%5.1f cm | %s/%s | motor L=%4d R=%4d\n",
+  const CliffState& c = sensorsCliff();
+  Serial.printf("L=%5.1f C=%5.1f R=%5.1f cm | Roi=%s D0=%d | %s/%s | motor L=%4d R=%4d\n",
                 d.left, d.center, d.right,
+                c.detected ? "CO" : "--", digitalRead(PIN_CLIFF_DO),
                 navModeName(navGetMode()), navStateName(navGetState()),
                 motorGetLeft(), motorGetRight());
 }

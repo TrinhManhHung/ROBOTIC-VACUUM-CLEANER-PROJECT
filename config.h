@@ -23,6 +23,12 @@
 #define PIN_TRIG_LEFT   23
 #define PIN_ECHO_LEFT   22
 
+// --- TCRT5000 (chong roi) ---
+// Gan duoi day, phia truoc, mat cam bien huong xuong san cach ~5-10 mm.
+// Chi dung D0 = ngo ra so cua LM393 (do nhay chinh bang bien tro tren module).
+// Chan A0 cua module de trong, khong noi.
+#define PIN_CLIFF_DO 2
+
 // ============================================================
 //  DONG CO
 // ============================================================
@@ -39,10 +45,10 @@
 #define MOTOR_RIGHT_TRIM 1.00f
 
 // PWM toi thieu de motor bat dau quay (vung chet). Can chinh theo motor thuc te.
-#define MOTOR_MIN_PWM  75
+#define MOTOR_MIN_PWM  90
 // "Moi" motor khi khoi dong tu dung yen / doi chieu
-#define MOTOR_KICK_PWM 200
-#define MOTOR_KICK_MS  100
+#define MOTOR_KICK_PWM 230
+#define MOTOR_KICK_MS  300
 
 // Tang/giam toc tu tu: moi MOTOR_RAMP_INTERVAL_MS thay doi MOTOR_RAMP_STEP
 #define MOTOR_RAMP_INTERVAL_MS 10
@@ -54,15 +60,15 @@
 
 // Neu motor khong quay noi -> tang MOTOR_MIN_PWM; muon cham hon -> giam SPEED_CRUISE
 // (gia tri nho hon MOTOR_MIN_PWM se tu dong duoc nang len MOTOR_MIN_PWM)
-#define SPEED_CRUISE  95    // chay thang binh thuong (cham de hut bui)
-#define SPEED_SLOW    80    // khi phia truoc co vat can o gan
+#define SPEED_CRUISE  120   // chay thang binh thuong (cham de hut bui)
+#define SPEED_SLOW    105   // khi phia truoc co vat can o gan
 // Lui/quay chi dien ra ngan khi tranh vat can -> can luc manh hon di thang
 // (quay tai cho banh bi truot ngang nen ton luc nhat)
 #define SPEED_TURN    140   // quay tai cho
 #define SPEED_BACK    120   // lui
-#define SPEED_MANUAL  100   // dieu khien tay
+#define SPEED_MANUAL  120   // dieu khien tay
 
-#define STEER_FACTOR  0.6f  // banh phia trong khi lach tranh tuong
+#define STEER_FACTOR  0.85f // banh phia trong khi lach tranh tuong
 
 // ============================================================
 //  CAM BIEN SIEU AM
@@ -72,6 +78,28 @@
 #define SONAR_TIMEOUT_US  15000   // ~2.5 m
 #define SONAR_MAX_CM      250.0f  // khong co echo -> coi nhu thoang
 #define SONAR_MIN_CM      2.0f
+
+// ============================================================
+//  CAM BIEN CHONG ROI (TCRT5000)
+// ============================================================
+
+// Module thuong: thay san (co phan xa) -> D0 = LOW, den bao sang
+//                mat san (mep cau thang) -> D0 = HIGH
+// Neu module cua ban nguoc lai thi doi thanh LOW.
+#define CLIFF_DO_ACTIVE_LEVEL HIGH
+
+// So lan doc lien tiep phai bao "mat san" moi coi la nguy co roi (loc nhieu)
+#define CLIFF_CONFIRM_SAMPLES 3
+// Phai thay lai san lien tuc trong thoi gian nay moi xoa canh bao
+#define CLIFF_RELEASE_MS      150
+
+// Sau khi thay lai san, lui them doan nay de banh xe cach xa mep
+#define CLIFF_EXTRA_BACKUP_MS 300
+// Sau mep roi quay co dinh thoi gian nay (~90 do, can chinh theo robot; ESCAPE_TURN_MS ~180 do).
+// Khong dung sieu am de quyet dinh vi sieu am khong nhin thay mep roi.
+#define CLIFF_TURN_MS         750
+// Sau khi lui ma van chua thay san trong thoi gian nay -> dung han (nghi bi nhac len)
+#define CLIFF_BACKUP_MAX_MS   2000
 
 // ============================================================
 //  NGUONG TRANH VAT CAN (cm)

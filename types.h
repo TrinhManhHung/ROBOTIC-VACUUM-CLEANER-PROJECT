@@ -7,6 +7,11 @@ struct Distances {
   float right;
 };
 
+struct CliffState {
+  bool detected;  // nguy co roi (da loc nhieu)
+  bool raw;       // ket qua lan doc gan nhat (chua loc)
+};
+
 enum RobotMode : uint8_t {
   MODE_IDLE,
   MODE_AUTO,

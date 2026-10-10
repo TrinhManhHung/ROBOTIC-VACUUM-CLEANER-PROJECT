@@ -25,6 +25,30 @@ uint8_t orderIdx = 0;
 uint32_t lastMeasureMs = 0;
 Distances data = {SONAR_MAX_CM, SONAR_MAX_CM, SONAR_MAX_CM};
 
+CliffState cliff = {false, false};
+uint8_t cliffHits = 0;
+uint32_t cliffLastActiveMs = 0;
+
+// Doc moi vong loop (khong gioi han tan suat) vi nguy co roi can phan ung nhanh nhat
+void updateCliff(uint32_t now) {
+  cliff.raw = digitalRead(PIN_CLIFF_DO) == CLIFF_DO_ACTIVE_LEVEL;
+
+  if (cliff.raw) {
+    cliffLastActiveMs = now;
+    if (cliffHits < CLIFF_CONFIRM_SAMPLES) cliffHits++;
+    if (cliffHits >= CLIFF_CONFIRM_SAMPLES && !cliff.detected) {
+      cliff.detected = true;
+      Serial.println("[SENSOR] NGUY CO ROI!");
+    }
+  } else {
+    cliffHits = 0;
+    if (cliff.detected && now - cliffLastActiveMs >= CLIFF_RELEASE_MS) {
+      cliff.detected = false;
+      Serial.println("[SENSOR] Da thay lai san");
+    }
+  }
+}
+
 float measureCm(const Sonar& s) {
   digitalWrite(s.trig, LOW);
   delayMicroseconds(2);
@@ -54,10 +78,15 @@ void sensorsInit() {
     digitalWrite(s.trig, LOW);
     pinMode(s.echo, INPUT);
   }
+
+  // Module da co dien tro keo len tren D0
+  pinMode(PIN_CLIFF_DO, INPUT);
 }
 
 void sensorsUpdate() {
   uint32_t now = millis();
+  updateCliff(now);
+
   if (now - lastMeasureMs < SONAR_INTERVAL_MS) return;
   lastMeasureMs = now;
 
@@ -79,4 +108,8 @@ void sensorsUpdate() {
 
 const Distances& sensorsGet() {
   return data;
+}
+
+const CliffState& sensorsCliff() {
+  return cliff;
 }

@@ -12,6 +12,10 @@ uint32_t stateStartMs = 0;
 TurnDir turnDir = TURN_RIGHT;
 bool escapeAfterBackup = false;
 
+// Lan xu ly hien tai la do mep roi (khong phai vat can sieu am)
+bool cliffEvent = false;
+uint32_t lastCliffMs = 0;
+
 ManualCmd manualCmd = MANUAL_STOP;
 
 // Lich su cac lan gap vat can de phat hien bi ket trong goc
@@ -56,7 +60,23 @@ bool frontClear(const Distances& d) {
          d.left > DIST_STOP_SIDE && d.right > DIST_STOP_SIDE;
 }
 
-void updateAuto(const Distances& d, uint32_t now) {
+void updateAuto(const Distances& d, bool cliff, uint32_t now) {
+  if (cliff) lastCliffMs = now;
+
+  // Nguy co roi uu tien cao nhat: dung ngay o moi trang thai (tru khi dang phanh/lui ra xa mep)
+  if (cliff && state != NAV_BRAKE && state != NAV_BACKUP) {
+    motorBrake();
+    cliffEvent = true;
+    turnDir = chooseTurn(d, false, false);
+    escapeAfterBackup = registerObstacle(now);
+    Serial.printf("[NAV] Mep roi khi dang %s -> lui, quay %s%s\n",
+                  navStateName(state),
+                  turnDir == TURN_LEFT ? "TRAI" : "PHAI",
+                  escapeAfterBackup ? " (KET GOC)" : "");
+    setState(NAV_BRAKE);
+    return;
+  }
+
   uint32_t elapsed = now - stateStartMs;
 
   switch (state) {
@@ -71,6 +91,7 @@ void updateAuto(const Distances& d, uint32_t now) {
 
       if (blockedC || blockedL || blockedR) {
         motorBrake();
+        cliffEvent = false;
         turnDir = chooseTurn(d, blockedL, blockedR);
         escapeAfterBackup = registerObstacle(now);
         Serial.printf("[NAV] Vat can L=%.0f C=%.0f R=%.0f -> quay %s%s\n",
@@ -96,7 +117,16 @@ void updateAuto(const Distances& d, uint32_t now) {
 
     case NAV_BACKUP:
       motorSet(-SPEED_BACK, -SPEED_BACK);
-      if (elapsed >= BACKUP_MS) {
+      if (cliff) {
+        // Van chua thay san: lui tiep; qua lau -> co the bi nhac len, dung han cho an toan
+        if (elapsed >= CLIFF_BACKUP_MAX_MS) {
+          motorBrake();
+          mode = MODE_IDLE;
+          setState(NAV_STOPPED);
+          Serial.println("[NAV] Lui qua lau van khong thay san (bi nhac len?) -> DUNG");
+        }
+      } else if (elapsed >= BACKUP_MS &&
+                 (!cliffEvent || now - lastCliffMs >= CLIFF_EXTRA_BACKUP_MS)) {
         motorBrake();
         setState(escapeAfterBackup ? NAV_ESCAPE : NAV_TURN);
       }
@@ -104,7 +134,14 @@ void updateAuto(const Distances& d, uint32_t now) {
 
     case NAV_TURN:
       spin(turnDir);
-      if ((elapsed >= TURN_MIN_MS && frontClear(d)) || elapsed >= TURN_MAX_MS) {
+      if (cliffEvent) {
+        // Sieu am thay phia truoc thoang ca khi do la mep roi -> quay du goc co dinh
+        if (elapsed >= CLIFF_TURN_MS) {
+          motorBrake();
+          cliffEvent = false;
+          setState(NAV_FORWARD);
+        }
+      } else if ((elapsed >= TURN_MIN_MS && frontClear(d)) || elapsed >= TURN_MAX_MS) {
         // Het TURN_MAX_MS ma van chua thoang: NAV_FORWARD se phat hien lai
         // va tiep tuc lui/quay; lap lai nhieu lan se kich hoat ESCAPE.
         if (!frontClear(d)) {
@@ -128,10 +165,14 @@ void updateAuto(const Distances& d, uint32_t now) {
   }
 }
 
-void updateManual(const Distances& d) {
+void updateManual(const Distances& d, bool cliff) {
   switch (manualCmd) {
     case MANUAL_FORWARD:
-      if (d.center < DIST_STOP_CENTER) {
+      if (cliff) {
+        motorBrake();
+        manualCmd = MANUAL_STOP;
+        Serial.println("[NAV] Dieu khien tay: phia truoc la mep roi, da dung (chi cho lui)");
+      } else if (d.center < DIST_STOP_CENTER) {
         motorBrake();
         manualCmd = MANUAL_STOP;
         Serial.println("[NAV] Dieu khien tay: phia truoc co vat can, da dung");
@@ -156,17 +197,19 @@ void navInit() {
 
 void navUpdate() {
   const Distances& d = sensorsGet();
+  bool cliff = sensorsCliff().detected;
   uint32_t now = millis();
 
   switch (mode) {
-    case MODE_AUTO:   updateAuto(d, now); break;
-    case MODE_MANUAL: updateManual(d);    break;
+    case MODE_AUTO:   updateAuto(d, cliff, now); break;
+    case MODE_MANUAL: updateManual(d, cliff);    break;
     case MODE_IDLE:   break;
   }
 }
 
 void navStartAuto() {
   mode = MODE_AUTO;
+  cliffEvent = false;
   memset(obstacleTimes, 0, sizeof(obstacleTimes));
   setState(NAV_FORWARD);
   Serial.println("[NAV] Che do AUTO");
