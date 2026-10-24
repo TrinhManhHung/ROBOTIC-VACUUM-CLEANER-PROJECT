@@ -13,6 +13,7 @@
 #include "motor.h"
 #include "sensors.h"
 #include "navigation.h"
+#include "battery.h"
 
 static bool debugEnabled = true;
 static uint32_t lastDebugMs = 0;
@@ -53,11 +54,12 @@ static void printDebug() {
 
   const Distances& d = sensorsGet();
   const CliffState& c = sensorsCliff();
-  Serial.printf("L=%5.1f C=%5.1f R=%5.1f cm | Roi=%s D0=%d | %s/%s | motor L=%4d R=%4d\n",
+  Serial.printf("L=%5.1f C=%5.1f R=%5.1f cm | Roi=%s D0=%d | %s/%s | motor L=%4d R=%4d | Pin %.2fV %u%%\n",
                 d.left, d.center, d.right,
                 c.detected ? "CO" : "--", digitalRead(PIN_CLIFF_DO),
                 navModeName(navGetMode()), navStateName(navGetState()),
-                motorGetLeft(), motorGetRight());
+                motorGetLeft(), motorGetRight(),
+                batteryVoltage(), batteryPercent());
 }
 
 void setup() {
@@ -90,6 +92,8 @@ void setup() {
   motorInit();
   sensorsInit();
   navInit();
+  batteryInit();
+  Serial.printf("Pin: %.2fV (%u%%)\n", batteryVoltage(), batteryPercent());
 
   Serial.println("Lenh: g=AUTO, x=dung, w/s/a/d=dieu khien tay, i=bat/tat debug");
 }
@@ -103,6 +107,7 @@ void loop() {
   }
 
   sensorsUpdate();
+  batteryUpdate();
   navUpdate();
   motorUpdate();
   printDebug();

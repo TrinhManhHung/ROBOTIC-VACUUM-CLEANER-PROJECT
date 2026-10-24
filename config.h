@@ -29,6 +29,11 @@
 // Chan A0 cua module de trong, khong noi.
 #define PIN_CLIFF_DO 4
 
+// --- Module cam bien dien ap (cau chia 30k/7.5k) ---
+// VCC/GND (cau vit) -> +/- pin 3S, chan S -> GPIO34, chan "-" -> GND ESP32.
+// GPIO34 thuoc ADC1 nen van doc duoc khi bat WiFi.
+#define PIN_BATT_SENSE 34
+
 // ============================================================
 //  DONG CO
 // ============================================================
@@ -98,6 +103,19 @@
 // Sau mep roi quay co dinh thoi gian nay (~90 do, can chinh theo robot; ESCAPE_TURN_MS ~180 do).
 // Khong dung sieu am de quyet dinh vi sieu am khong nhin thay mep roi.
 #define CLIFF_TURN_MS         750
+
+// ============================================================
+//  PIN 3S (Li-ion / LiPo)
+// ============================================================
+
+#define BATT_CELLS          3
+#define BATT_DIVIDER_RATIO  5.0f    // (30k + 7.5k) / 7.5k
+// He so hieu chinh: do pin bang dong ho, BATT_CALIB = V_dong_ho / V_hien_thi
+#define BATT_CALIB          1.00f
+#define BATT_SAMPLES        16      // so mau ADC lay trung binh moi lan doc
+#define BATT_INTERVAL_MS    200
+#define BATT_FILTER_ALPHA   0.1f    // 0..1, nho hon = muot hon nhung cham hon
+#define BATT_LOW_PERCENT    15
 
 // ============================================================
 //  NGUONG TRANH VAT CAN (cm)
